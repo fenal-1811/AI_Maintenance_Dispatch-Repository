@@ -1,0 +1,140 @@
+{
+  "name": "WF03_Technician_Matching",
+  "nodes": [
+    {
+      "id": "d19863ff-4bd1-4e88-93cf-15d22a945fb4",
+      "name": "Dispatch Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "maintenance-dispatch",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "bf0fcb51-4262-4662-945d-967ea1e172e6"
+    },
+    {
+      "id": "9f28a6f7-f05f-48a5-a524-e224ef15cf10",
+      "name": "Read Dispatch Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        430,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const b=$json.body??$json;return [{json:{ticket_id:String(b.ticket_id??''),category:String(b.category??''),priority:String(b.priority??'Medium')}}];"
+      }
+    },
+    {
+      "id": "a54d9001-d772-436e-81a9-286dfa4da3f7",
+      "name": "Read Technicians",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Technicians",
+          "mode": "name"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "47898b90-72f1-4629-98a2-8d7d25dbd3d9",
+      "name": "Match Available Technician",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const request=$('Read Dispatch Input').first().json;\nif(!request.ticket_id||!request.category)return [{json:{success:false,error:'ticket_id and category required'}}];\nif(request.priority==='Critical')return [{json:{success:false,requires_human_review:true,message:'Critical incidents must be manually approved before dispatch'}}];\nconst technicians=$input.all().map(i=>i.json);\nconst matches=technicians.filter(t=>String(t.Skills??'').toLowerCase().split(',').map(x=>x.trim()).includes(request.category.toLowerCase())&&String(t.Availability??'').toLowerCase()==='available'&&Number(t.Active_Jobs??0)<Number(t.Max_Jobs??1)).sort((a,b)=>Number(a.Active_Jobs??0)-Number(b.Active_Jobs??0));\nif(!matches.length)return [{json:{success:false,ticket_id:request.ticket_id,message:'No available matching technician; manual assignment required'}}];\nconst t=matches[0];return [{json:{success:true,ticket_id:request.ticket_id,technician_id:t.Technician_ID,technician_name:t.Technician_Name,technician_email:t.Email??'',dispatch_status:'Awaiting Confirmation',assigned_date:new Date().toISOString(),message:'Suggested technician; confirm assignment and update ticket manually'}}];"
+      }
+    },
+    {
+      "id": "36ae1e89-a3a3-47e4-ab41-96e7d45eac48",
+      "name": "API Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1180,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Dispatch Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read Dispatch Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Dispatch Input": {
+      "main": [
+        [
+          {
+            "node": "Read Technicians",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Technicians": {
+      "main": [
+        [
+          {
+            "node": "Match Available Technician",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Available Technician": {
+      "main": [
+        [
+          {
+            "node": "API Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

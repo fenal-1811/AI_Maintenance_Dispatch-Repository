@@ -1,0 +1,142 @@
+{
+  "name": "WF02_AI_Issue_Analyzer",
+  "nodes": [
+    {
+      "id": "6fa82a75-4d19-4fc1-8415-bc0264a00d38",
+      "name": "AI Analysis Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "maintenance-analyze",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "2543e174-c2f5-4c5f-a5db-02ea4993920e"
+    },
+    {
+      "id": "edcf31a9-4fa3-4bb4-83f9-4d1472c224d3",
+      "name": "Prepare Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const b=$json.body??$json;\nif(!b.issue_description) return [{json:{success:false,error:'issue_description required'}}];\nreturn [{json:{issue_description:String(b.issue_description).slice(0,3000),prompt:'Classify this maintenance issue. Return ONLY JSON with keys category, priority, summary, recommended_action, requires_human_review. Categories: HVAC, Plumbing, Electrical, Civil, IT Equipment, General Maintenance, Other. Priority: Critical, High, Medium, Low. Critical safety incidents require human review. Do not suggest unsafe repair steps. Issue: '+String(b.issue_description).slice(0,3000)}}];"
+      }
+    },
+    {
+      "id": "771293c9-911f-45f4-afe9-5479679d401c",
+      "name": "Gemini Analyze",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "REPLACE_WITH_GEMINI_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({contents:[{parts:[{text:$json.prompt}]}],generationConfig:{responseMimeType:'application/json'}}) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "69b89795-9120-46d8-b954-10f388516642",
+      "name": "Parse AI Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        970,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const t=$json.candidates?.[0]?.content?.parts?.map(p=>p.text??'').join('')??'';\ntry {const a=JSON.parse(t);const allowed=['HVAC','Plumbing','Electrical','Civil','IT Equipment','General Maintenance','Other'];const priorities=['Critical','High','Medium','Low'];return [{json:{success:true,category:allowed.includes(a.category)?a.category:'Other',priority:priorities.includes(a.priority)?a.priority:'Medium',summary:String(a.summary??''),recommended_action:String(a.recommended_action??''),requires_human_review:Boolean(a.requires_human_review)||a.priority==='Critical'}}];}\ncatch(e){return [{json:{success:false,error:'AI response was not valid JSON',raw:t.slice(0,500)}}];}"
+      }
+    },
+    {
+      "id": "44ef796d-5906-49d7-a9ea-e7a4a568d328",
+      "name": "API Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1240,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "AI Analysis Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini Analyze",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Analyze": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Result": {
+      "main": [
+        [
+          {
+            "node": "API Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

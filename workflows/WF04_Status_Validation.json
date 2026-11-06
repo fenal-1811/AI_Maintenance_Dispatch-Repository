@@ -1,0 +1,80 @@
+{
+  "name": "WF04_Status_Validation",
+  "nodes": [
+    {
+      "id": "471cbdbb-5f92-4bf2-998e-09ce6e3678bc",
+      "name": "Status Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "maintenance-status",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "c193299c-6987-4df2-8180-f2f484ab133c"
+    },
+    {
+      "id": "6df77eb4-8961-4324-af97-13554c63bd5b",
+      "name": "Validate Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const b=$json.body??$json;const allowed=['Pending','Analyzing','Awaiting Approval','Assigned','In Progress','On Hold','Completed','Rejected','Escalated'];\nif(!b.ticket_id||!allowed.includes(b.status))return [{json:{success:false,error:'Valid ticket_id and status required'}}];\nreturn [{json:{success:true,ticket_id:String(b.ticket_id),status:b.status,resolution_notes:String(b.resolution_notes??''),updated_at:new Date().toISOString(),message:'Validated. Update the matching Google Sheets row through an authenticated admin workflow.'}}];"
+      }
+    },
+    {
+      "id": "b29b119c-2d91-480e-a20d-e48f53d53665",
+      "name": "API Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Status Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Status": {
+      "main": [
+        [
+          {
+            "node": "API Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

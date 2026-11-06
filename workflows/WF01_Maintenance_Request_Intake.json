@@ -1,0 +1,215 @@
+{
+  "name": "WF01_Maintenance_Request_Intake",
+  "nodes": [
+    {
+      "id": "28e6f427-f60c-4803-a5e5-598eb7abef9a",
+      "name": "Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "maintenance-request",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "8efabe1e-22e8-4299-bd8a-49c8d09986f3"
+    },
+    {
+      "id": "72178f00-9558-42d6-8fef-7cb4a2eea41a",
+      "name": "Validate Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const b=$json.body??$json;\nconst required=['employee_name','employee_email','issue_description','location'];\nconst missing=required.filter(k=>!String(b[k]??'').trim());\nif(missing.length) return [{json:{success:false,error:'Missing fields',missing}}];\nif(!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(String(b.employee_email))) return [{json:{success:false,error:'Invalid email'}}];\nconst issue=String(b.issue_description).trim().slice(0,3000);\nconst text=issue.toLowerCase();\nconst category=/air condition|\\bac\\b|cooling|hvac/.test(text)?'HVAC':/leak|water|pipe|drain/.test(text)?'Plumbing':/power|electrical|wire|socket|spark/.test(text)?'Electrical':/computer|printer|network|wifi/.test(text)?'IT Equipment':'General Maintenance';\nconst critical=/fire|smoke|gas leak|electrocution|exposed live wire|collapse/.test(text);\nconst priority=critical?'Critical':/flood|burst pipe|no power|urgent/.test(text)?'High':'Medium';\nreturn [{json:{success:true,ticket_id:'MNT-'+Date.now()+'-'+Math.floor(Math.random()*10000),employee_name:String(b.employee_name).trim(),employee_email:String(b.employee_email).trim(),phone:String(b.phone??''),issue_description:issue,location:String(b.location).trim(),category,priority,status:critical?'Escalated':'Pending',assigned_technician_id:'',created_at:new Date().toISOString(),updated_at:new Date().toISOString(),resolution_notes:'',requires_human_review:critical}}];"
+      }
+    },
+    {
+      "id": "590c0eb7-75d4-4909-87cf-3ede6a96f75d",
+      "name": "Valid Request?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        700,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "991e511c-242a-43c6-80c2-245217dcc30f",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c4459aa7-a316-46af-8262-5f8255c14b57",
+      "name": "Save Maintenance Ticket",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        970,
+        200
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Maintenance_Requests",
+          "mode": "name"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "66f9069a-187e-471c-bd49-38e9f1921011",
+      "name": "Success Confirmation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1210,
+        200
+      ],
+      "parameters": {
+        "jsCode": "return [{json:{success:true,ticket_id:$('Validate Request').first().json.ticket_id,message:'Maintenance request received',category:$('Validate Request').first().json.category,priority:$('Validate Request').first().json.priority,requires_human_review:$('Validate Request').first().json.requires_human_review}}];"
+      }
+    },
+    {
+      "id": "3defaf16-c10e-4052-9462-379985cfa4a8",
+      "name": "Validation Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1210,
+        440
+      ],
+      "parameters": {
+        "jsCode": "return [{json:$('Validate Request').first().json}];"
+      }
+    },
+    {
+      "id": "902c2d44-1dec-4c73-bca2-4622bcf16328",
+      "name": "API Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1480,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Request Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Request": {
+      "main": [
+        [
+          {
+            "node": "Valid Request?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Maintenance Ticket": {
+      "main": [
+        [
+          {
+            "node": "Success Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success Confirmation": {
+      "main": [
+        [
+          {
+            "node": "API Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Error": {
+      "main": [
+        [
+          {
+            "node": "API Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Request?": {
+      "main": [
+        [
+          {
+            "node": "Save Maintenance Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}
