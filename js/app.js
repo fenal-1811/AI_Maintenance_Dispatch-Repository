@@ -1,6 +1,6 @@
 // Set this to the WF01 n8n Production URL only after securing the endpoint.
 // For local testing, use the Test URL while the workflow is listening for a test event.
-const WEBHOOK_URL = "REPLACE_WITH_N8N_WEBHOOK_URL";
+const WEBHOOK_URL ="https://fenalfelix07.app.n8n.cloud/webhook-test/maintenance-request";
 const form = document.getElementById("requestForm");
 if (form) {
   form.addEventListener("submit", async (event) => {
